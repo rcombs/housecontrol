@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>INSTEON Remote Debug Interface</title>
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="/leap.min.js"></script>
+	<script>
+function $(id){
+	return document.getElementById(id);
+}
+	</script>
+	<script>
+var socket = io.connect();
+socket.on("authenticated", function(){
+	alert("Successful Auth");
+});
+socket.on("authFailed", function(){
+	alert("BAD AUTH");
+});
+document.addEventListener("DOMContentLoaded", function(){
+	$("login").addEventListener("submit", function(e){
+		socket.emit("authenticate", {
+			username: $("username").value,
+			password: $("password").value
+		});
+		e.preventDefault();
+		return false;
+	}, false);
+	var frame;
+	Leap.loop(function(nFrame){
+		frame = nFrame;
+	});
+	setInterval(function(){
+		if(!frame || !frame.hands || !frame.hands.length || !frame.hands[0].palmPosition){
+			return;
+		}
+//		console.log(frame.hands[0].palmPosition[1]);
+		var id = $("idSelect").value;
+		if(!id){
+			id = $("id").value;
+		}
+		if(!id){
+			return;
+		}
+		id = id.replace(/[\.\: ]/gi,"");
+		if(id.length != 6){
+			return;
+		}
+		var idArr = [];
+		for(var i = 0; i < 3; i++){
+			idArr.push(parseInt(id.substring(i*2, 2 + i * 2), 16));
+		}
+/*
+		var cmdTxt = $("command").value;
+		if(!cmdTxt){
+			cmdTxt = $("commandEntry").value.replace(/[\.\: ]/gi,"");
+		}
+		if(cmdTxt.length != 4){
+			alert("BAD CMD");
+			return;
+		}
+*/
+		var cmd = [0x11, Math.max(Math.min(((frame.hands[0].palmPosition[1] - 60) * 255 / 300) | 0, 255), 0)];
+/*
+		for(var i = 0; i < 2; i++){
+			cmd.push(parseInt(cmdTxt.substring(i*2, 2 + i * 2), 16));
+		}
+*/
+//		console.log("SENDING", cmd);
+		socket.emit("sendCommand", [0x62].concat(idArr, [0x0F], cmd));
+		return;
+	}, 50);
+	$("rawHex").addEventListener("submit", function(e){
+		var hex = $("rawCommand").value.replace(/[\.\: ]/gi,"");
+		var cmd = [];
+		for(var i = 0; i < 2; i++){
+			cmd.push(parseInt(hex.substring(i*2, 2 + i * 2), 16));
+		}
+		socket.emit("sendCommand", cmd);
+		e.preventDefault();
+		return false;
+	}, false);
+}, false);
+	</script>
+</head>
+<body>
+	<form id="login">
+		<h1>Login</h1>
+		<input type="text" id="username" placeholder="username"><br>
+		<input type="password" id="password" placeholder="password"><br>
+		<input type="submit" value="Submit">
+	</form>
+	<form id="sendINSTEON">
+		<h1>Send INSTEON Command</h1>
+		ID: <select id="idSelect">
+			<option value="">(Enter)</option>
+			<option value="1E 4F 86">PLM</option>
+			<option value="1B 02 90">Office EZUIRT</option>
+			<option value="1D 05 5F">Office Dimmer</option>
+			<option value="16 DC E6">Foyer Dimmer</option>
+			<optgroup label="Doors">
+				<option value="15 E7 71">Garage Door</option>
+				<option value="16 84 D1">Front Door</option>
+			</optgroup>
+			<optgroup label="Rodger's Room">
+				<option value="1D 06 64">Light</option>
+				<option value="1D 39 99">Fan</option>
+			</optgroup>
+                        <option value="1a8e6a">Media Room</option>
+		</select> <input type="text" id="id"><br>
+		Command: <select id="command">
+			<option value="">(Enter)</option>
+			<option value="11FF">Light On</option>
+			<option value="12FF">Light On Fast</option>
+			<option value="1300">Light Off</option>
+			<option value="1400">Light Off Fast</option>
+			<option value="1500">Brighten</option>
+			<option value="1600">Dim</option>
+		</select> <input type="text" id="commandEntry"><br>
+		<input type="submit" value="Submit">
+	</form>
+	<form id="rawHex">
+		<h1>Send Raw Hex</h1>
+		<input type="text" id="rawCommand"><br>
+		<input type="submit" value="Submit">
+	</form>
+</body>
+</html>

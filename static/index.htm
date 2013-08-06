@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Home Automation</title>
+		<script src="/socket.io/socket.io.js"></script>
+		<script>
+			var config = %CONFIG%;
+
+			var socket = io.connect();
+			
+			socket.on("error", function(err){
+				console.error(err);
+			});
+			
+			socket.on("commandReply", function(reply){
+				console.log(reply);
+			});
+			
+			socket.on("log", function(log){
+				console.log(log);
+			});
+
+			HTMLElement.prototype.removeAllChildren = function(){
+				while(this.hasChildNodes()){
+					this.removeChild(this.firstChild);
+				}
+			};
+			HTMLElement.prototype.remove = function(){
+				this.parentNode.removeChild(this);
+			};
+
+			function parseHex(str){
+				if(Array.isArray(str)){
+					return str;
+				}
+				var strings = str.replace(/0x/g, "").split(/[ \,\.\:]/);
+				var arr = [];
+				for(var i = 0; i < strings.length; i++){
+					var string = strings[i];
+					for(var j = 0; j < string.length; j += 2){
+						arr.push(parseInt(strings[i].substring(j, j + 2), "16"));
+					}
+				}
+				return arr;
+			}
+
+			function sendCommand(id, cmd){
+				socket.emit("standardCommand", parseHex(id), parseHex(cmd));
+			}
+
+			function sendCommandToCurrent(cmd){
+				var device = JSON.parse(document.getElementById("devices").value);
+				var devArr;
+				if(Array.isArray(device)){
+					devArr = device;
+				}else{
+					devArr = device.address;
+				}
+				sendCommand(devArr, cmd);
+			}
+			
+			function getIDs(devices){
+				var retArr = [];
+				for(var i = 0; i < devices.length; i++){
+					retArr.push(config.devices[devices[i]].address);
+				}
+				return retArr;
+			}
+
+			function populateDevices(devices){
+				var devicesEl = document.getElementById("devices");
+				devicesEl.removeAllChildren();
+				var allEl = document.createElement("option");
+				allEl.innerHTML = "All";
+				allEl.value = JSON.stringify(getIDs(devices));
+				devicesEl.appendChild(allEl);
+				for(var i = 0; i < devices.length; i++){
+					var device = devices[i];
+					var el = document.createElement("option");
+					el.innerHTML = device;
+					el.value = JSON.stringify(config.devices[device]);
+					devicesEl.appendChild(el);
+				}
+			}
+
+			document.addEventListener("DOMContentLoaded", function(){
+				document.getElementById("on").addEventListener("click", function(){
+					sendCommandToCurrent("11FF");
+				}, false);
+				document.getElementById("off").addEventListener("click", function(){
+					sendCommandToCurrent("1300");
+				}, false);
+				document.getElementById("link").addEventListener("click", function(){
+					socket.emit("link", document.getElementById("group").valueAsNumber, parseInt(document.getElementById("type").value, 16));
+					socket.once("linked", function(err, data){
+						if(err){
+							alert(err);
+						}else{
+							alert(JSON.stringify(data));
+						}
+					});
+				});
+				document.getElementById("cancelLinking").addEventListener("click", function(){
+					socket.emit("cancelLinking");
+				});
+				var groupsEl = document.getElementById("groups");
+				groupsEl.addEventListener("change", function(){
+					populateDevices(JSON.parse(this.value));
+				});
+
+				var allEl = document.createElement("option");
+				allEl.innerHTML = "All";
+				allEl.value = JSON.stringify(Object.keys(config.devices));
+				groupsEl.appendChild(allEl);
+				for(var i in config.groups){
+					var el = document.createElement("option");
+					el.innerHTML = i;
+					el.value = JSON.stringify(config.groups[i]);
+					groupsEl.appendChild(el);
+				}
+				populateDevices(Object.keys(config.devices));
+			}, false);
+		</script>
+	</head>
+	<body>
+		<select id="groups"></select><select id="devices"></select><br>
+		<button id="on">ON</button><button id="off">OFF</button><br>
+		Group: <input type="number" id="group" min="0" max="255" value="0" step="1"></input> <select id="type">
+			<option value="0">Slave/Responder</option>
+			<option value="1">Master/Controller</option>
+			<option value="3">Auto/Either</option>
+			<option value="FF">Delete/Unlink</option>
+		</select> <button id="link">Link</button><button id="cancelLinking">Cancel Linking</button>
+	</body>
+</html>
